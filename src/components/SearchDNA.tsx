@@ -89,7 +89,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
 
     try {
       // Llamar a la API para buscar el patrón
-      const response = await searchPattern(pattern, 500, true); // 500 búsquedas paralelas, con caché
+      const response = await searchPattern(pattern, 250, true); // 500 búsquedas paralelas, con caché
       
       const totalTime = performance.now() - startTime;
       setSearchTime(totalTime);
