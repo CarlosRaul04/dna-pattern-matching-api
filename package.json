@@ -53,10 +53,13 @@
       "devDependencies": {
           "@types/node": "^20.10.0",
           "@vitejs/plugin-react-swc": "^3.10.2",
+          "concurrently": "^8.2.2",
           "vite": "6.3.5"
       },
       "scripts": {
           "dev": "vite",
-          "build": "vite build"
+          "build": "vite build",
+          "api": "cd API && npm start",
+          "start": "concurrently \"npm run api\" \"npm run dev\" --names \"API,WEB\" --prefix-colors \"blue,green\""
       }
   }

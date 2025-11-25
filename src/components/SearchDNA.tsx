@@ -1,89 +1,58 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, Search, Loader2, FileText, AlertCircle, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import Papa from 'papaparse';
+import { Search, Loader2, AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Database } from 'lucide-react';
 import { toast } from 'sonner';
+import { searchPattern, getAllSequences, DNARecord } from '../services/api';
 
-interface DNARecord {
-  Nombre: string;
-  Secuencia: string;
-}
-
-interface SearchResult extends DNARecord {
-  matches: boolean;
-}
+// Usar DNARecord directamente en lugar de SearchResult
+type SearchResult = DNARecord;
 
 interface SearchDNAProps {
   theme: 'light' | 'dark';
 }
 
+interface SearchMetadata {
+  backendTotal: number;
+  frontendTotal: number;
+  hasDiscrepancy: boolean;
+}
+
 const ITEMS_PER_PAGE = 10;
 
 export default function SearchDNA({ theme }: SearchDNAProps) {
-  const [dnaData, setDnaData] = useState<DNARecord[]>([]);
-  const [fileName, setFileName] = useState<string>('');
-  const [pattern, setPattern] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [allSequences, setAllSequences] = useState([] as DNARecord[]);
+  const [pattern, setPattern] = useState('');
+  const [searchResults, setSearchResults] = useState([] as SearchResult[]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
-  const [nameFilter, setNameFilter] = useState<string>('');
+  const [nameFilter, setNameFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [searchTime, setSearchTime] = useState(null as number | null);
+  const [backendTime, setBackendTime] = useState(null as number | null);
+  const [searchMetadata, setSearchMetadata] = useState(null as SearchMetadata | null);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // Cargar todas las secuencias al montar el componente
+  useEffect(() => {
+    loadAllSequences();
+  }, []);
 
-    if (!file.name.endsWith('.csv')) {
-      toast.error('Por favor, selecciona un archivo CSV válido');
-      return;
+  const loadAllSequences = async () => {
+    try {
+      setIsLoading(true);
+      const sequences = await getAllSequences();
+      setAllSequences(sequences);
+      toast.success(`✅ ${sequences.length} secuencias cargadas desde la API`);
+    } catch (error) {
+      toast.error('❌ Error al conectar con la API. Verifica que esté corriendo en el puerto 3000');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const data = results.data as any[];
-        
-        // Validar que tenga las columnas correctas
-        if (data.length === 0) {
-          toast.error('El archivo CSV está vacío');
-          return;
-        }
-
-        const firstRow = data[0];
-        if (!firstRow.hasOwnProperty('Nombre') || !firstRow.hasOwnProperty('Secuencia')) {
-          toast.error('El CSV debe tener las columnas: Nombre,Secuencia');
-          return;
-        }
-
-        // Validar que las secuencias solo contengan A, C, G, T
-        const validData = data.filter(row => {
-          if (!row.Nombre || !row.Secuencia) return false;
-          const sequence = row.Secuencia.toUpperCase();
-          return /^[ACGT]+$/.test(sequence);
-        });
-
-        if (validData.length === 0) {
-          toast.error('No se encontraron secuencias válidas (deben contener solo A, C, G, T)');
-          return;
-        }
-
-        setDnaData(validData.map(row => ({
-          Nombre: row.Nombre,
-          Secuencia: row.Secuencia.toUpperCase()
-        })));
-        setFileName(file.name);
-        setSearchResults([]);
-        setHasSearched(false);
-        setNameFilter('');
-        setCurrentPage(1);
-        toast.success(`✅ Archivo cargado: ${validData.length} secuencias encontradas`);
-      },
-      error: () => {
-        toast.error('Error al leer el archivo CSV');
-      }
-    });
+  const handleRefresh = async () => {
+    await loadAllSequences();
   };
 
   const handlePatternChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,14 +63,14 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
     }
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!pattern) {
       toast.error('Por favor, ingresa un patrón de búsqueda');
       return;
     }
 
-    if (dnaData.length === 0) {
-      toast.error('Por favor, carga un archivo CSV primero');
+    if (allSequences.length === 0) {
+      toast.error('No hay secuencias cargadas. Verifica la conexión con la API');
       return;
     }
 
@@ -109,46 +78,112 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
     setHasSearched(false);
     setNameFilter('');
     setCurrentPage(1);
+    setSearchTime(null);
+    setBackendTime(null);
+    setSearchMetadata(null);
 
-    // Simular procesamiento
-    setTimeout(() => {
-      const results: SearchResult[] = dnaData.map(record => ({
-        ...record,
-        matches: record.Secuencia.includes(pattern)
-      }));
+    const startTime = performance.now();
+    console.log('\n' + '='.repeat(60));
+    console.log(`🔍 [SearchDNA] Iniciando búsqueda del patrón: "${pattern}"`);
+    console.log('='.repeat(60));
 
-      setSearchResults(results);
-      setIsSearching(false);
+    try {
+      // Llamar a la API para buscar el patrón
+      const response = await searchPattern(pattern, 500, true); // 500 búsquedas paralelas, con caché
+      
+      const totalTime = performance.now() - startTime;
+      setSearchTime(totalTime);
+      setBackendTime(response.tiempoTotal || null);
+
+      console.log(`⏱️  [SearchDNA] Tiempo total UI: ${totalTime.toFixed(2)}ms`);
+      console.log(`📊 [SearchDNA] Backend reporta: ${response.total} coincidencias`);
+      console.log(`📊 [SearchDNA] Backend devolvió ${response.nombres.length} nombres`);
+      
+      // Verificar si hay duplicados en la respuesta del backend
+      const nombresUnicos = new Set(response.nombres);
+      if (nombresUnicos.size !== response.nombres.length) {
+        console.warn(`⚠️  [SearchDNA] Backend devolvió nombres duplicados: ${response.nombres.length} nombres, ${nombresUnicos.size} únicos`);
+      }
+      
+      // Crear un mapa de nombres a secuencias para búsqueda rápida
+      const secuenciasPorNombre = new Map(allSequences.map(seq => [seq.nombre, seq]));
+      
+      // Obtener los detalles completos SOLO de los nombres únicos que devolvió el backend
+      const matchedSequences: SearchResult[] = [];
+      const nombresNoEncontrados: string[] = [];
+      
+      for (const nombre of nombresUnicos) {
+        const secuencia = secuenciasPorNombre.get(nombre);
+        if (secuencia) {
+          matchedSequences.push(secuencia);
+        } else {
+          nombresNoEncontrados.push(nombre);
+        }
+      }
+
+      console.log(`📊 [SearchDNA] Frontend encontró: ${matchedSequences.length} secuencias con detalles`);
+      
+      // Detectar discrepancias
+      const hasDiscrepancy = matchedSequences.length !== response.total;
+      if (hasDiscrepancy) {
+        console.warn(`⚠️  [SearchDNA] DISCREPANCIA: Backend=${response.total}, Frontend=${matchedSequences.length}`);
+        
+        if (nombresNoEncontrados.length > 0) {
+          console.warn(`⚠️  [SearchDNA] Nombres en backend pero no en frontend (${nombresNoEncontrados.length}):`, nombresNoEncontrados.slice(0, 5));
+        }
+        
+        // Verificar si hay duplicados en allSequences
+        const nombresEnFrontend = allSequences.map(s => s.nombre);
+        const nombresEnFrontendUnicos = new Set(nombresEnFrontend);
+        if (nombresEnFrontend.length !== nombresEnFrontendUnicos.size) {
+          const duplicados = nombresEnFrontend.length - nombresEnFrontendUnicos.size;
+          console.warn(`⚠️  [SearchDNA] Frontend tiene ${duplicados} nombres duplicados en allSequences`);
+        }
+        
+        toast.warning(`⚠️ Discrepancia: Backend=${response.total}, Frontend=${matchedSequences.length}. Revisa la consola para detalles.`);
+      } else {
+        console.log(`✅ [SearchDNA] Conteos coinciden perfectamente`);
+      }
+      
+      setSearchResults(matchedSequences);
+      setSearchMetadata({
+        backendTotal: response.total,
+        frontendTotal: matchedSequences.length,
+        hasDiscrepancy
+      });
       setHasSearched(true);
-
-      const matchCount = results.filter(r => r.matches).length;
 
       // Guardar en historial
       const historyEntry = {
         id: Date.now().toString(),
         pattern,
         date: new Date().toISOString(),
-        matchCount,
-        foundNames: results.filter(r => r.matches).map(r => r.Nombre)
+        matchCount: response.total,
+        foundNames: response.nombres
       };
 
       const history = JSON.parse(localStorage.getItem('dna_search_history') || '[]');
       history.unshift(historyEntry);
       localStorage.setItem('dna_search_history', JSON.stringify(history));
 
-      if (matchCount > 0) {
-        toast.success(`🎉 Se encontraron ${matchCount} coincidencias`);
-      } else {
-        toast.info('🔍 No se encontraron coincidencias');
-      }
-    }, 1000);
+      // Toast removido - los resultados se muestran en la UI
+
+      console.log(`✅ [SearchDNA] Búsqueda completada exitosamente`);
+      console.log('='.repeat(60) + '\n');
+    } catch (error) {
+      toast.error('❌ Error al realizar la búsqueda');
+      console.error('❌ [SearchDNA] Error:', error);
+      console.log('='.repeat(60) + '\n');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
-  // Filtrar solo coincidencias y aplicar filtro de nombre
+  // Filtrar resultados por nombre
   const filteredResults = useMemo(() => {
-    return searchResults
-      .filter(r => r.matches) // Solo mostrar coincidencias
-      .filter(r => r.Nombre.toLowerCase().includes(nameFilter.toLowerCase()));
+    return searchResults.filter(r => 
+      r.nombre.toLowerCase().includes(nameFilter.toLowerCase())
+    );
   }, [searchResults, nameFilter]);
 
   // Paginación
@@ -159,7 +194,8 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
     return filteredResults.slice(startIndex, endIndex);
   }, [filteredResults, currentPage]);
 
-  const matchCount = searchResults.filter(r => r.matches).length;
+  // Usar siempre el conteo del backend como fuente de verdad
+  const matchCount = searchMetadata?.backendTotal ?? searchResults.length;
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -173,11 +209,37 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-6xl mx-auto"
       >
-        <h1 className={`text-4xl mb-8 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-          🧬 Búsqueda de Patrones de ADN
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className={`text-4xl ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            🧬 Búsqueda de Patrones de ADN
+          </h1>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
+              theme === 'dark'
+                ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/50'
+                : 'bg-blue-500/20 text-blue-600 hover:bg-blue-500/30 border border-blue-500/50'
+            }`}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Cargando...
+              </>
+            ) : (
+              <>
+                <Database className="w-5 h-5" />
+                Recargar ({allSequences.length})
+              </>
+            )}
+          </motion.button>
+        </div>
 
-        {/* Upload Section */}
+        {/* API Status */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -188,53 +250,25 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
               : 'bg-white/80 border-gray-200'
           }`}
         >
-          <h2 className={`text-2xl mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            1. Cargar Archivo CSV
-          </h2>
-          
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => fileInputRef.current?.click()}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl transition-all ${
-                theme === 'dark'
-                  ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/50'
-                  : 'bg-blue-500/20 text-blue-600 hover:bg-blue-500/30 border border-blue-500/50'
-              }`}
-            >
-              <Upload className="w-5 h-5" />
-              Seleccionar CSV
-            </motion.button>
-
-            {fileName && (
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                  theme === 'dark'
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-green-500/20 text-green-600'
-                }`}
-              >
-                <FileText className="w-5 h-5" />
-                <span>{fileName}</span>
-                <span className="ml-2">({dnaData.length} registros)</span>
-              </motion.div>
-            )}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className={`text-2xl mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                Estado de la API
+              </h2>
+              <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                {isLoading ? (
+                  'Conectando con la API...'
+                ) : allSequences.length > 0 ? (
+                  `✅ Conectado - ${allSequences.length} secuencias disponibles`
+                ) : (
+                  '❌ No se pudo conectar con la API. Verifica que esté corriendo en http://localhost:3000'
+                )}
+              </p>
+            </div>
+            <div className={`w-4 h-4 rounded-full ${
+              allSequences.length > 0 ? 'bg-green-500' : 'bg-red-500'
+            } animate-pulse`} />
           </div>
-
-          <p className={`mt-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-            El archivo debe tener las columnas: <strong>Nombre,Secuencia</strong>
-          </p>
         </motion.div>
 
         {/* Search Section */}
@@ -249,7 +283,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
           }`}
         >
           <h2 className={`text-2xl mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            2. Ingresar Patrón de Búsqueda
+            Ingresar Patrón de Búsqueda
           </h2>
 
           <div className="flex flex-col sm:flex-row gap-4">
@@ -269,9 +303,9 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleSearch}
-              disabled={isSearching || !pattern || dnaData.length === 0}
+              disabled={isSearching || !pattern || allSequences.length === 0}
               className={`px-8 py-3 rounded-xl transition-all flex items-center gap-2 ${
-                isSearching || !pattern || dnaData.length === 0
+                isSearching || !pattern || allSequences.length === 0
                   ? 'bg-gray-500/50 text-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 shadow-lg'
               }`}
@@ -279,12 +313,12 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
               {isSearching ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Buscando...
+                  Buscando con KMP...
                 </>
               ) : (
                 <>
                   <Search className="w-5 h-5" />
-                  Buscar Coincidencias
+                  Buscar con API
                 </>
               )}
             </motion.button>
@@ -308,11 +342,11 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                   : 'bg-white/80 border-gray-200'
               }`}
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className={`p-4 rounded-xl ${
                   theme === 'dark' ? 'bg-blue-500/10' : 'bg-blue-500/10'
                 }`}>
-                  <p className={`mb-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                     Patrón Buscado:
                   </p>
                   <p className={`text-2xl ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
@@ -325,8 +359,8 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                     ? theme === 'dark' ? 'bg-green-500/10' : 'bg-green-500/10'
                     : theme === 'dark' ? 'bg-orange-500/10' : 'bg-orange-500/10'
                 }`}>
-                  <p className={`mb-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Coincidencias Encontradas:
+                  <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Coincidencias:
                   </p>
                   <motion.p
                     initial={{ scale: 0 }}
@@ -338,10 +372,80 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                         : theme === 'dark' ? 'text-orange-400' : 'text-orange-600'
                     }`}
                   >
-                    {matchCount} / {searchResults.length}
+                    {matchCount} / {allSequences.length}
                   </motion.p>
+                  {searchMetadata?.hasDiscrepancy && (
+                    <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                      ⚠️ {searchMetadata.frontendTotal} con detalles
+                    </p>
+                  )}
                 </div>
+
+                {backendTime !== null && (
+                  <div className={`p-4 rounded-xl ${
+                    theme === 'dark' ? 'bg-purple-500/10' : 'bg-purple-500/10'
+                  }`}>
+                    <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Tiempo Backend:
+                    </p>
+                    <motion.p
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring' }}
+                      className={`text-2xl ${theme === 'dark' ? 'text-purple-400' : 'text-purple-600'}`}
+                    >
+                      {(backendTime / 1000).toFixed(2)}s
+                    </motion.p>
+                  </div>
+                )}
+
+                {searchTime !== null && (
+                  <div className={`p-4 rounded-xl ${
+                    theme === 'dark' ? 'bg-cyan-500/10' : 'bg-cyan-500/10'
+                  }`}>
+                    <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Tiempo Total:
+                    </p>
+                    <motion.p
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring' }}
+                      className={`text-2xl ${theme === 'dark' ? 'text-cyan-400' : 'text-cyan-600'}`}
+                    >
+                      {(searchTime / 1000).toFixed(2)}s
+                    </motion.p>
+                  </div>
+                )}
               </div>
+
+              {/* Performance Info */}
+              {backendTime !== null && searchTime !== null && (
+                <div className={`mt-4 p-3 rounded-lg ${
+                  theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100'
+                }`}>
+                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    ⚡ Velocidad: {(allSequences.length / (backendTime / 1000)).toFixed(2)} búsquedas/segundo
+                    {' • '}
+                    🌐 Latencia de red: {((searchTime - backendTime) / 1000).toFixed(3)}s
+                  </p>
+                </div>
+              )}
+
+              {/* Discrepancy Warning */}
+              {searchMetadata?.hasDiscrepancy && (
+                <div className={`mt-4 p-4 rounded-lg border ${
+                  theme === 'dark' 
+                    ? 'bg-yellow-500/10 border-yellow-500/30' 
+                    : 'bg-yellow-50 border-yellow-300'
+                }`}>
+                  <p className={`text-sm ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                    ⚠️ <strong>Discrepancia detectada:</strong> El backend encontró {searchMetadata.backendTotal} coincidencias, 
+                    pero solo se pudieron cargar {searchMetadata.frontendTotal} registros con detalles completos. 
+                    Esto puede deberse a que el backend tiene datos más actualizados. 
+                    Intenta recargar las secuencias.
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -449,14 +553,14 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                                 <td className={`px-4 py-3 ${
                                   theme === 'dark' ? 'text-white' : 'text-gray-900'
                                 }`}>
-                                  {result.Nombre}
+                                  {result.nombre}
                                 </td>
                                 <td className={`px-4 py-3 font-mono ${
                                   theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
                                 }`}>
-                                  {result.Secuencia.length > 50
-                                    ? result.Secuencia.substring(0, 50) + '...'
-                                    : result.Secuencia}
+                                  {result.secuencia.length > 50
+                                    ? result.secuencia.substring(0, 50) + '...'
+                                    : result.secuencia}
                                 </td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
@@ -501,7 +605,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
 
                             <div className="flex gap-2">
                               {(() => {
-                                const pages = [];
+                                const pages: number[] = [];
                                 const maxVisible = 5;
                                 
                                 if (totalPages <= maxVisible) {

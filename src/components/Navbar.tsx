@@ -31,7 +31,7 @@ export default function Navbar({ theme, toggleTheme }: NavbarProps) {
           <Link to="/" className="flex items-center gap-2">
             <Dna className={`w-8 h-8 ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`} />
             <span className={`text-xl ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-              DNA Matcher
+              ADN Matcher
             </span>
           </Link>
 

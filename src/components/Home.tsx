@@ -23,7 +23,7 @@ export default function Home() {
           transition={{ delay: 0.2 }}
           className="text-5xl md:text-7xl mb-6 text-white"
         >
-          DNA Matcher
+          ADN Matcher
         </motion.h1>
 
         <motion.p
@@ -41,8 +41,8 @@ export default function Home() {
           transition={{ delay: 0.5 }}
           className="text-lg mb-12 text-gray-400 max-w-2xl mx-auto"
         >
-          Carga archivos CSV con secuencias genéticas, busca patrones específicos
-          y descubre coincidencias de forma rápida y precisa.
+          Busca patrones específicos en secuencias de ADN usando el algoritmo KMP.
+          Conectado con API backend para búsquedas ultra rápidas y precisas.
         </motion.p>
 
         <motion.div
@@ -84,8 +84,8 @@ export default function Home() {
           className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto"
         >
           {[
-            { title: 'Carga CSV', desc: 'Importa secuencias desde archivos CSV' },
-            { title: 'Búsqueda Rápida', desc: 'Encuentra patrones de ADN al instante' },
+            { title: 'API Backend', desc: 'Conectado con Node.js + Express + KMP' },
+            { title: 'Búsqueda KMP', desc: 'Algoritmo eficiente en C++ para patrones' },
             { title: 'Historial', desc: 'Consulta búsquedas anteriores guardadas' },
           ].map((feature, index) => (
             <motion.div
