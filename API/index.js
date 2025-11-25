@@ -20,8 +20,8 @@ const CSV_PATH = path.join(__dirname, 'data', 'DataSet(in).csv');
 
 // Ruta binario KMP 
 const KMP_BIN = process.platform === 'win32'
-  ? path.join(__dirname, 'backend', 'build', 'kmp_search.exe')
-  : path.join(__dirname, 'backend', 'build', 'kmp_search');
+  ? path.join(__dirname, 'kmp-engine', 'build', 'kmp_search.exe')
+  : path.join(__dirname, 'kmp-engine', 'build', 'kmp_search');
 
 // Caché de resultados de búsqueda (patrón -> resultados)
 const searchCache = new Map();
