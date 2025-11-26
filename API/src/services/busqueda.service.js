@@ -4,7 +4,7 @@ const { busquedaParalela } = require('../utils/kmp.util');
 const searchCache = new Map();
 const CACHE_MAX = 100;
 
-async function buscarPatron(patron, concurrencia = 100, useCache = true) {
+async function buscarPatron(patron, useCache = true) {
   const requestStart = Date.now();
 
   // Normalización del patrón
@@ -32,11 +32,11 @@ async function buscarPatron(patron, concurrencia = 100, useCache = true) {
   const loadDuration = Date.now() - loadStart;
 
   console.log(`Registros cargados en ${loadDuration}ms (total: ${registros.length})`);
-  console.log(`Concurrencia usada para búsqueda: ${concurrencia}`);
+  //console.log(`Concurrencia usada para búsqueda: ${concurrencia}`);
 
   // Búsqueda paralela con medición de tiempo
   const searchStart = Date.now();
-  const nombres = await busquedaParalela(patron, registros, concurrencia);
+  const nombres = await busquedaParalela(patron, registros);
   const searchDuration = Date.now() - searchStart;
 
   console.log(`Búsqueda KMP completada en ${searchDuration}ms`);
