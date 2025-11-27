@@ -33,9 +33,7 @@ class CsvService {
     }
   }
 
-  // -------------------------------------
-  // 1) Procesar CSV recién subido
-  // -------------------------------------
+  // Procesar CSV recién subido
   async procesarCsv(fullPath, filename) {
     const registros = await parseCsvFromFile(fullPath);
 
@@ -55,9 +53,8 @@ class CsvService {
     };
   }
 
-  // -------------------------------------
-  // 2) Obtener registros en memoria
-  // -------------------------------------
+
+  // Obtener registros en memoria
   obtenerRegistros() {
     if (!registrosCache) {
       throw new Error("No hay un CSV cargado en memoria.");
@@ -66,9 +63,7 @@ class CsvService {
     return registrosCache;
   }
 
-  // -------------------------------------
-  // 3) Listar CSV almacenados en uploads/csv
-  // -------------------------------------
+  // Listar CSV almacenados en uploads/csv
   listarCsvs() {
     const archivos = fs
       .readdirSync(UPLOAD_DIR)
@@ -77,17 +72,13 @@ class CsvService {
     return archivos;
   }
 
-  // -------------------------------------
-  // 4) Obtener el CSV activo
-  // -------------------------------------
+  // Obtener el CSV activo
   getActiveCsv() {
     const data = JSON.parse(fs.readFileSync(ACTIVE_FILE_PATH, "utf8"));
     return data.active;
   }
 
-  // -------------------------------------
-  // 5) Establecer CSV activo
-  // -------------------------------------
+  // Establecer CSV activo
   async setActiveCsv(filename) {
     const archivos = this.listarCsvs();
     if (!archivos.includes(filename))

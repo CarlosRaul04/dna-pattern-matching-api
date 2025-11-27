@@ -42,6 +42,12 @@ export default function App() {
     setIsAuthenticated(true);
   }, []);
 
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    setIsAuthenticated(false);
+  }, []);
+
   const RequireAuth = ({ children }: { children: JSX.Element }) => {
     if (!isAuthenticated) {
       return <Navigate to="/login" replace />;
@@ -56,13 +62,13 @@ export default function App() {
           ? 'bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900' 
           : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
       }`}>
-        {isAuthenticated && <Navbar theme={theme} toggleTheme={toggleTheme} isAuthenticated={isAuthenticated} />}
+        {isAuthenticated && <Navbar theme={theme} toggleTheme={toggleTheme} isAuthenticated={isAuthenticated} onLogout={handleLogout} />}
         <Routes>
           <Route
             path="/"
             element={
               <RequireAuth>
-                <Home />
+                <Home theme={theme} />
               </RequireAuth>
             }
           />

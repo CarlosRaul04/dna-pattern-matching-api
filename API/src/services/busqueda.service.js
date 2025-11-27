@@ -21,7 +21,7 @@ async function buscarPatron(patron, userId, useCache = true) {
   console.log("-".repeat(60));
 
 
-  // 1) USAR CACHE SI EXISTE
+  // USAR CACHE SI EXISTE
   if (useCache && searchCache.has(patron)) {
     const cached = searchCache.get(patron);
     console.log(`Resultado obtenido desde caché en ${Date.now() - requestStart}ms`);
@@ -29,7 +29,7 @@ async function buscarPatron(patron, userId, useCache = true) {
     return cached;
   }
 
-  // 2) OBTENER CSV ACTIVO
+  // OBTENER CSV ACTIVO
   const activeCsv = csvService.getActiveCsv();
   if (!activeCsv) {
     throw new Error("No hay un CSV activo seleccionado.");
@@ -39,13 +39,13 @@ async function buscarPatron(patron, userId, useCache = true) {
   console.log(`CSV activo: ${activeCsv}`);
   console.log(`Ruta del archivo: ${csvPath}`);
 
-  // 3) EJECUTAR BINARIO C++
+  // EJECUTAR BINARIO C++
   const searchStart = Date.now();
 
   const resultadoCpp = await ejecutarKmpConCsv(patron, csvPath);
 
   const searchDuration = Date.now() - searchStart;
-  console.log(`🔍 Búsqueda KMP completada por el binario en ${searchDuration}ms`);
+  console.log(`Búsqueda KMP completada por el binario en ${searchDuration}ms`);
 
 
   const resultado = {
@@ -56,22 +56,7 @@ async function buscarPatron(patron, userId, useCache = true) {
     archivo: activeCsv
   };
 
-  // GUARDAR HISTORIAL EN BD
-  try {
-    await searchHistoryService.crearHistorial({
-      userId,
-      patron: resultado.patron,
-      resultados: resultado.nombres,
-      totalCoincidencias: resultado.total,
-      archivoCsv: resultado.archivo,
-      duracionMs: resultado.tiempoTotal
-    });
-    console.log("Historial de búsqueda guardado en la base de datos");
-  } catch (error) {
-    console.error("Error guardando historial:", error.message);
-  }
-
-  // 4) GUARDAR EN CACHE
+  // GUARDAR EN CACHE
   searchCache.set(patron, resultado);
 
   if (searchCache.size > CACHE_MAX) {

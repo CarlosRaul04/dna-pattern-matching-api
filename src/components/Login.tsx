@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+﻿import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { Lock, LogIn, Mail, Loader2, ArrowRight } from "lucide-react";
@@ -17,18 +17,21 @@ export default function Login({ theme, onAuthSuccess }: LoginProps) {
   const [loading, setLoading] = useState(false);
 
   const styles = useMemo(() => ({
-    cardBase: theme === "dark" ? "bg-white/5 border-white/10" : "bg-white/80 border-gray-200",
+    cardBase: theme === "dark" ? "bg-white/5 border-white/10" : "bg-white/95 border-gray-200",
     textMuted: theme === "dark" ? "text-gray-400" : "text-gray-600",
     textMain: theme === "dark" ? "text-white" : "text-gray-900",
     input: theme === "dark"
-      ? "bg-gray-900/50 border-gray-700 text-white placeholder-gray-500"
-      : "bg-white border-gray-300 text-gray-900 placeholder-gray-400",
+      ? "bg-gray-900/50 border-gray-700 text-white placeholder-gray-500 focus-within:border-blue-500"
+      : "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus-within:border-blue-500",
   }), [theme]);
+
+  const accent = theme === "dark" ? "text-blue-300" : "text-blue-600";
+  const accentLink = theme === "dark" ? "text-blue-300 hover:text-blue-200" : "text-blue-600 hover:text-blue-700";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!correo || !password) {
-      toast.error("Completa correo y contrasena");
+      toast.error("Completa correo y contraseña");
       return;
     }
 
@@ -41,7 +44,7 @@ export default function Login({ theme, onAuthSuccess }: LoginProps) {
       toast.success(`Bienvenido ${response.usuario.nombre}`);
       navigate("/");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo iniciar sesion";
+      const message = error instanceof Error ? error.message : "No se pudo iniciar sesión";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -49,93 +52,95 @@ export default function Login({ theme, onAuthSuccess }: LoginProps) {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-4 py-12 overflow-hidden">
-      <div className="absolute inset-0 opacity-60 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.25),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(147,51,234,0.25),transparent_30%),radial-gradient(circle_at_50%_80%,rgba(56,189,248,0.2),transparent_30%)]" />
+    <div className="container mx-auto px-4 py-12 min-h-[calc(100vh-80px)] flex items-center justify-center">
+      <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.25),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(147,51,234,0.25),transparent_30%),radial-gradient(circle_at_50%_80%,rgba(56,189,248,0.2),transparent_30%)]" />
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`relative w-full max-w-lg p-8 rounded-3xl backdrop-blur-xl border shadow-2xl ${styles.cardBase}`}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className={`relative w-full max-w-sm mx-auto p-6 sm:p-8 rounded-2xl backdrop-blur-xl border shadow-2xl ${styles.cardBase}`}
       >
-        <div className="text-center mb-8 space-y-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-blue-400">Acceso seguro</p>
-          <h1 className={`text-4xl font-semibold ${styles.textMain}`}>Iniciar sesión</h1>
-          <p className={styles.textMuted}>Entra para continuar con tus búsquedas de ADN.</p>
-        </div>
-
-        <motion.form
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          onSubmit={handleSubmit}
-          className="space-y-6"
-        >
-          <div className="space-y-2">
-            <label className={`block text-sm font-medium ${styles.textMain}`}>Correo</label>
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${styles.input}`}>
-              <Mail className={theme === "dark" ? "text-blue-300" : "text-blue-600"} />
-              <input
-                type="email"
-                value={correo}
-                onChange={(e) => setCorreo(e.target.value)}
-                placeholder="tu.correo@ejemplo.com"
-                className="w-full bg-transparent focus:outline-none"
-                autoComplete="email"
-                required
-              />
-            </div>
+        <div className="space-y-8">
+          <div className="text-center space-y-3">
+            <p className={`text-xs uppercase tracking-[0.35em] ${accent}`}>Acceso seguro</p>
+            <h1 className={`text-4xl font-semibold ${styles.textMain}`}>Iniciar sesión</h1>
+            <p className={`text-sm ${styles.textMuted}`}>Ingresa tus datos para continuar con tus búsquedas de ADN.</p>
           </div>
 
-          <div className="space-y-2">
-            <label className={`block text-sm font-medium ${styles.textMain}`}>Contraseña</label>
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${styles.input}`}>
-              <Lock className={theme === "dark" ? "text-purple-300" : "text-purple-600"} />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-transparent focus:outline-none"
-                autoComplete="current-password"
-                required
-              />
-            </div>
-          </div>
-
-          <motion.button
-            whileHover={{ scale: loading ? 1 : 1.02 }}
-            whileTap={{ scale: loading ? 1 : 0.98 }}
-            type="submit"
-            disabled={loading}
-            className={`w-full px-6 py-3 rounded-xl flex items-center justify-center gap-2 text-lg font-semibold transition-all ${
-              loading
-                ? "bg-gray-500/50 text-gray-300 cursor-not-allowed"
-                : "bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 shadow-lg"
-            }`}
+          <motion.form
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            onSubmit={handleSubmit}
+            className="space-y-7"
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Validando...
-              </>
-            ) : (
-              <>
-                <LogIn className="w-5 h-5" />
-                Entrar
-              </>
-            )}
-          </motion.button>
+            <div className="space-y-2">
+              <label className={`block text-sm font-medium ${styles.textMain}`}>Correo electrónico</label>
+              <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl border transition-all ${styles.input}`}>
+                <Mail className={accent} />
+                <input
+                  type="email"
+                  value={correo}
+                  onChange={(e) => setCorreo(e.target.value)}
+                  placeholder="tu.correo@ejemplo.com"
+                  className="w-full bg-transparent focus:outline-none text-sm"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+            </div>
 
-          <div className="flex items-center justify-between pt-2">
-            <p className={`text-sm ${styles.textMuted}`}>¿No tienes cuenta?</p>
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 text-sm font-medium text-blue-300 hover:text-blue-200"
+            <div className="space-y-2">
+              <label className={`block text-sm font-medium ${styles.textMain}`}>Contraseña</label>
+              <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl border transition-all ${styles.input}`}>
+                <Lock className={theme === "dark" ? "text-purple-300" : "text-purple-600"} />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-transparent focus:outline-none text-sm"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <motion.button
+              whileHover={{ scale: loading ? 1 : 1.03 }}
+              whileTap={{ scale: loading ? 1 : 0.97 }}
+              type="submit"
+              disabled={loading}
+              className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 text-base font-semibold transition-all ${loading
+                ? "bg-gray-500/40 text-gray-300 cursor-not-allowed"
+                : "bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-xl hover:from-blue-600 hover:to-purple-700"}`}
             >
-              Crear cuenta
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </motion.form>
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Validando...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  Entrar
+                </>
+              )}
+            </motion.button>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4">
+              <p className={`text-sm ${styles.textMuted}`}>¿No tienes cuenta?</p>
+              <Link
+                to="/register"
+                className={`inline-flex items-center gap-2 text-sm font-medium transition-colors ${accentLink}`}
+              >
+                Crear cuenta
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </motion.form>
+        </div>
       </motion.div>
     </div>
   );

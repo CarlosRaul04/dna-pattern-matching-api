@@ -1,9 +1,16 @@
-import { motion } from 'motion/react';
+﻿import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Dna, ArrowRight, Sparkles } from 'lucide-react';
 
-export default function Home() {
+interface HomeProps {
+  theme: 'light' | 'dark';
+}
+
+export default function Home({ theme }: HomeProps) {
   const navigate = useNavigate();
+  const textMain = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const textMuted = theme === 'dark' ? 'text-gray-300' : 'text-gray-700';
+  const textSubtle = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
 
   return (
     <div className="container mx-auto px-4 py-16 min-h-[calc(100vh-80px)] flex items-center justify-center">
@@ -21,28 +28,28 @@ export default function Home() {
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="text-5xl md:text-7xl mb-6 text-white"
+          className={`text-5xl md:text-7xl mb-6 ${textMain}`}
         >
-          ADN Matcher
+          Buscador de ADN
         </motion.h1>
 
         <motion.p
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-xl md:text-2xl mb-4 text-gray-300"
+          className={`text-xl md:text-2xl mb-4 ${textMuted}`}
         >
-          Sistema Avanzado de Búsqueda de Secuencias de ADN
+          Sistema Avanzado de Busqueda de Secuencias de ADN
         </motion.p>
 
         <motion.p
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="text-lg mb-12 text-gray-400 max-w-2xl mx-auto"
+          className={`text-lg mb-12 ${textSubtle} max-w-2xl mx-auto`}
         >
-          Busca patrones específicos en secuencias de ADN usando el algoritmo KMP.
-          Conectado con API backend para búsquedas ultra rápidas y precisas.
+          Busca patrones especificos en secuencias de ADN usando el algoritmo KMP.
+          Conectado con API backend para busquedas ultra rapidas y precisas.
         </motion.p>
 
         <motion.div
@@ -59,7 +66,7 @@ export default function Home() {
           >
             <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <span className="relative flex items-center gap-2 text-lg">
-              Comenzar Búsqueda
+              Comenzar Busqueda
               <ArrowRight className="w-5 h-5" />
             </span>
           </motion.button>
@@ -68,7 +75,11 @@ export default function Home() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => navigate('/history')}
-            className="px-8 py-4 bg-white/10 backdrop-blur-md text-white rounded-xl border border-white/20 hover:bg-white/20 transition-all shadow-xl"
+            className={`px-8 py-4 rounded-xl border transition-all shadow-xl backdrop-blur-md ${
+              theme === 'dark'
+                ? 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                : 'bg-white text-gray-900 border-gray-200 hover:bg-gray-50'
+            }`}
           >
             <span className="flex items-center gap-2 text-lg">
               Ver Historial
@@ -85,18 +96,22 @@ export default function Home() {
         >
           {[
             { title: 'API Backend', desc: 'Conectado con Node.js + Express + KMP' },
-            { title: 'Búsqueda KMP', desc: 'Algoritmo eficiente en C++ para patrones' },
-            { title: 'Historial', desc: 'Consulta búsquedas anteriores guardadas' },
+            { title: 'Busqueda KMP', desc: 'Algoritmo eficiente en C++ para patrones' },
+            { title: 'Historial', desc: 'Consulta busquedas anteriores guardadas' },
           ].map((feature, index) => (
             <motion.div
               key={index}
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.8 + index * 0.1 }}
-              className="p-6 bg-white/5 backdrop-blur-md rounded-xl border border-white/10 hover:bg-white/10 transition-all"
+              className={`p-6 backdrop-blur-md rounded-xl border transition-all ${
+                theme === 'dark'
+                  ? 'bg-white/5 border-white/10 hover:bg-white/10'
+                  : 'bg-white border-gray-200 hover:bg-gray-50'
+              }`}
             >
-              <h3 className="text-xl mb-2 text-white">{feature.title}</h3>
-              <p className="text-gray-400">{feature.desc}</p>
+              <h3 className={`text-xl mb-2 ${textMain}`}>{feature.title}</h3>
+              <p className={textSubtle}>{feature.desc}</p>
             </motion.div>
           ))}
         </motion.div>

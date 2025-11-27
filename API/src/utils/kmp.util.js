@@ -7,13 +7,7 @@ const KMP_BIN = process.platform === "win32"
   ? path.join(__dirname, "../../kmp-engine/build/kmp.exe")
   : path.join(__dirname, "../../kmp-engine/build/kmp.exe");
 
-/**
- * Ejecuta el binario C++ pasándole:
- *   1) patrón
- *   2) ruta del CSV
- * 
- * El binario debe devolver un JSON por stdout.
- */
+
 function ejecutarKmpConCsv(patron, csvPath) {
   return new Promise((resolve, reject) => {
     execFile(
@@ -23,7 +17,7 @@ function ejecutarKmpConCsv(patron, csvPath) {
       (err, stdout, stderr) => {
 
         if (err) {
-          console.error("⚠ Error al ejecutar el binario KMP:", err);
+          console.error("Error al ejecutar el binario KMP:", err);
           return reject(new Error(stderr || err.message));
         }
 
@@ -32,7 +26,7 @@ function ejecutarKmpConCsv(patron, csvPath) {
           const json = JSON.parse(output);
           resolve(json);
         } catch (jsonErr) {
-          console.error("⚠ Error al parsear salida del KMP:", jsonErr);
+          console.error("Error al parsear salida del KMP:", jsonErr);
           console.error("Salida recibida:", stdout.toString());
           reject(new Error("Salida inválida del algoritmo KMP."));
         }

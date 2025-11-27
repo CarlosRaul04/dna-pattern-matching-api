@@ -52,7 +52,6 @@ async function loginUsuario(identifier, password) {
   return {
     token,
     usuario: {
-      id: usuario._id,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
       correo: usuario.email || usuario.correo
