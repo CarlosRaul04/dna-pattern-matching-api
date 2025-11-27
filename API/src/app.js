@@ -5,7 +5,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 
 const busquedaRoutes = require('./routes/busqueda.routes');
-const registroRoutes = require('./routes/registro.routes');
+const csvRoutes = require('./routes/csv.routes');
 
 const app = express();
 
@@ -20,7 +20,7 @@ app.use(morgan('dev'));
 
 // Rutas
 app.use('/api/buscar', busquedaRoutes);
-app.use('/api/secuencias', registroRoutes);
+app.use('/api/csv', csvRoutes);
 
 app.get('/', (_req, res) => {
     res.send('API de Búsqueda de ADN con KMP')

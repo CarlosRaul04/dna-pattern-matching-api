@@ -1,5 +1,7 @@
-const { loadRegistros } = require('../utils/csv.util');
-const { busquedaParalela } = require('../utils/kmp.util');
+// src/services/search.service.js
+const path = require("path");
+const csvService = require("./csv.service");
+const { ejecutarKmpConCsv } = require("../utils/kmp.util");
 
 const searchCache = new Map();
 const CACHE_MAX = 100;
@@ -7,54 +9,68 @@ const CACHE_MAX = 100;
 async function buscarPatron(patron, useCache = true) {
   const requestStart = Date.now();
 
-  // Normalización del patrón
-  patron = String(patron || '').trim().toUpperCase();
+  // Normalizar patrón
+  patron = String(patron || "").trim().toUpperCase();
   if (!patron) {
     throw new Error('El parámetro "patron" es obligatorio');
   }
 
-  console.log('\n' + '-'.repeat(60));
+  console.log("\n" + "-".repeat(60));
   console.log(`Nueva búsqueda: "${patron}"`);
-  console.log('-'.repeat(60));
+  console.log("-".repeat(60));
 
-  // Uso de caché si está habilitado
+  // ---------------------------------------
+  // 1) USAR CACHE SI EXISTE
+  // ---------------------------------------
   if (useCache && searchCache.has(patron)) {
     const cached = searchCache.get(patron);
-    const cacheTime = Date.now() - requestStart;
-    console.log(`Resultado obtenido desde caché en ${cacheTime}ms`);
-    console.log('-'.repeat(60) + '\n');
+    console.log(`Resultado obtenido desde caché en ${Date.now() - requestStart}ms`);
+    console.log("-".repeat(60) + "\n");
     return cached;
   }
 
-  // Medir tiempo de carga del CSV
-  const loadStart = Date.now();
-  const registros = await loadRegistros();
-  const loadDuration = Date.now() - loadStart;
+  // ---------------------------------------
+  // 2) OBTENER CSV ACTIVO
+  // ---------------------------------------
+  const activeCsv = csvService.getActiveCsv();
+  if (!activeCsv) {
+    throw new Error("No hay un CSV activo seleccionado.");
+  }
 
-  console.log(`Registros cargados en ${loadDuration}ms (total: ${registros.length})`);
-  //console.log(`Concurrencia usada para búsqueda: ${concurrencia}`);
+  const csvPath = path.join(__dirname, "../../uploads/csv", activeCsv);
+  console.log(`CSV activo: ${activeCsv}`);
+  console.log(`Ruta del archivo: ${csvPath}`);
 
-  // Búsqueda paralela con medición de tiempo
+  // ---------------------------------------
+  // 3) EJECUTAR BINARIO C++
+  // ---------------------------------------
   const searchStart = Date.now();
-  const nombres = await busquedaParalela(patron, registros);
+
+  const resultadoCpp = await ejecutarKmpConCsv(patron, csvPath);
+
   const searchDuration = Date.now() - searchStart;
+  console.log(`🔍 Búsqueda KMP completada por el binario en ${searchDuration}ms`);
 
-  console.log(`Búsqueda KMP completada en ${searchDuration}ms`);
-  console.log(`Coincidencias encontradas: ${nombres.length}`);
+  // resultadoCpp debe ser algo así:
+  // {
+  //   patron: "...",
+  //   total: 3,
+  //   sospechosos: ["Juan", "Ana", "Luis"]
+  // }
 
-  // Resultado final
   const resultado = {
     patron,
-    total: nombres.length,
-    nombres,
+    total: resultadoCpp.total || 0,
+    nombres: resultadoCpp.sospechosos || [],
     tiempoTotal: Date.now() - requestStart,
-    registrosProcesados: registros.length
+    archivo: activeCsv
   };
 
-  // Guardar en caché
+  // ---------------------------------------
+  // 4) GUARDAR EN CACHE
+  // ---------------------------------------
   searchCache.set(patron, resultado);
 
-  // Limitar tamaño del caché
   if (searchCache.size > CACHE_MAX) {
     const firstKey = searchCache.keys().next().value;
     searchCache.delete(firstKey);
@@ -62,7 +78,7 @@ async function buscarPatron(patron, useCache = true) {
   }
 
   console.log(`Tiempo total del request: ${resultado.tiempoTotal}ms`);
-  console.log('-'.repeat(60) + '\n');
+  console.log("-".repeat(60) + "\n");
 
   return resultado;
 }
