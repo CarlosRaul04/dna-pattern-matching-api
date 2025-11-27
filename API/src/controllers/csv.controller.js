@@ -23,9 +23,9 @@ class CsvController {
   };
 
   // Obtener registros cargados en memoria
-  getRegistros = (req, res) => {
+  getRegistros = async (req, res) => {
     try {
-      const data = csvService.obtenerRegistros();
+      const data = await csvService.obtenerRegistros();
       res.json({ registros: data });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -33,9 +33,9 @@ class CsvController {
   };
 
   // Listar archivos CSV subidos
-  listarCsvs = (req, res) => {
+  listarCsvs = async (req, res) => {
     try {
-      const archivos = csvService.listarCsvs();
+      const archivos = await csvService.listarCsvs();
       res.json({ archivos });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -43,9 +43,9 @@ class CsvController {
   };
 
   // Ver el CSV activo
-  getActiveCsv = (req, res) => {
+  getActiveCsv = async (req, res) => {
     try {
-      const active = csvService.getActiveCsv();
+      const active = await csvService.getActiveCsv();
       res.json({ active });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -53,10 +53,10 @@ class CsvController {
   };
 
   // Definir CSV activo
-  setActiveCsv = (req, res) => {
+  setActiveCsv = async (req, res) => {
     try {
       const { filename } = req.params;
-      const data = csvService.setActiveCsv(filename);
+      const data = await csvService.setActiveCsv(filename);
       res.json(data);
     } catch (error) {
       res.status(500).json({ error: error.message });

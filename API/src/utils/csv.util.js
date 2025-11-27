@@ -8,14 +8,16 @@ async function parseCsvFromFile(pathFile) {
     const resultados = [];
 
     fs.createReadStream(pathFile)
-      .pipe(csv())
+      .pipe(csv({ mapHeaders: ({ header }) => header.trim() }))
       .on("headers", (headers) => {
-        const esperado = ["Nombre,Secuencia"];
-        const valid = esperado.every(h => headers.includes(h));
-
-        if (!valid) {
-          reject(new Error("El CSV debe tener exactamente las columnas: Nombre, Secuencia"));
-        }
+        const esperado = ["Nombre", "Secuencia"];
+        const valid = esperado.every((h) => headers.includes(h));
+        if (!valid)
+          reject(
+            new Error(
+              "El CSV debe tener exactamente las columnas: Nombre, Secuencia"
+            )
+          );
       })
       .on("data", (row) => {
         resultados.push({
@@ -29,5 +31,5 @@ async function parseCsvFromFile(pathFile) {
 }
 
 module.exports = {
-  parseCsvFromFile
+  parseCsvFromFile,
 };

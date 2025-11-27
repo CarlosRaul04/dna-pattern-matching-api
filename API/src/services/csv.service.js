@@ -19,6 +19,18 @@ class CsvService {
     if (!fs.existsSync(ACTIVE_FILE_PATH)) {
       fs.writeFileSync(ACTIVE_FILE_PATH, JSON.stringify({ active: null }));
     }
+
+    const active = this.getActiveCsv();
+    const full = path.join(UPLOAD_DIR, active || "");
+    if (active && fs.existsSync(full)) {
+      parseCsvFromFile(full)
+        .then((r) => {
+          registrosCache = r;
+        })
+        .catch(() => {
+          registrosCache = null;
+        });
+    }
   }
 
   // -------------------------------------
@@ -32,14 +44,14 @@ class CsvService {
     }
 
     // Guardar en memoria (para el C++)
-    registrosCache = registros;
+    registrosCache = await registros;
 
     this.setActiveCsv(filename);
-    
+
     return {
       filename,
       cantidad: registros.length,
-      mensaje: "CSV cargado correctamente"
+      mensaje: "CSV cargado correctamente",
     };
   }
 
@@ -50,6 +62,7 @@ class CsvService {
     if (!registrosCache) {
       throw new Error("No hay un CSV cargado en memoria.");
     }
+
     return registrosCache;
   }
 
@@ -57,8 +70,9 @@ class CsvService {
   // 3) Listar CSV almacenados en uploads/csv
   // -------------------------------------
   listarCsvs() {
-    const archivos = fs.readdirSync(UPLOAD_DIR)
-      .filter(f => f.toLowerCase().endsWith(".csv"));
+    const archivos = fs
+      .readdirSync(UPLOAD_DIR)
+      .filter((f) => f.toLowerCase().endsWith(".csv"));
 
     return archivos;
   }
@@ -74,18 +88,18 @@ class CsvService {
   // -------------------------------------
   // 5) Establecer CSV activo
   // -------------------------------------
-  setActiveCsv(filename) {
+  async setActiveCsv(filename) {
     const archivos = this.listarCsvs();
-
-    if (!archivos.includes(filename)) {
+    if (!archivos.includes(filename))
       throw new Error("El archivo no existe en uploads/csv.");
-    }
+
+    const fullPath = path.join(UPLOAD_DIR, filename);
+    registrosCache = await parseCsvFromFile(fullPath); // aquí llenas el caché
 
     fs.writeFileSync(
       ACTIVE_FILE_PATH,
       JSON.stringify({ active: filename }, null, 2)
     );
-
     return { active: filename };
   }
 }
