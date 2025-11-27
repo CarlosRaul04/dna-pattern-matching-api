@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import { DNARecord, getActiveCsv, getCsvRegistros, listCsvFiles, setActiveCsv as setActiveCsvApi, uploadCsv } from '../services/csvApi';
 import { searchPattern } from '../services/searchApi';
+import { createHistory } from '../services/historyApi';
 
 // Usar DNARecord directamente en lugar de SearchResult
 type SearchResult = DNARecord;
@@ -200,17 +201,17 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
       });
       setHasSearched(true);
 
-      const historyEntry = {
-        id: Date.now().toString(),
-        pattern,
-        date: new Date().toISOString(),
-        matchCount: response.total,
-        foundNames: response.nombres,
-      };
-
-      const history = JSON.parse(localStorage.getItem('dna_search_history') || '[]');
-      history.unshift(historyEntry);
-      localStorage.setItem('dna_search_history', JSON.stringify(history));
+      try {
+        await createHistory({
+          patron: pattern,
+          resultados: response.nombres || [],
+          totalCoincidencias: response.total,
+          archivoCsv: activeCsv || 'desconocido',
+          duracionMs: response.tiempoTotal || totalTime,
+        });
+      } catch (historyError) {
+        console.warn('No se pudo guardar historial remoto', historyError);
+      }
     } catch (error) {
       toast.error('Error al realizar la busqueda');
       console.error('[SearchDNA] Error:', error);

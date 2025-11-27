@@ -5,17 +5,21 @@ import { Dna, Search, History, Sun, Moon, LogIn } from 'lucide-react';
 interface NavbarProps {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  isAuthenticated?: boolean;
 }
 
-export default function Navbar({ theme, toggleTheme }: NavbarProps) {
+export default function Navbar({ theme, toggleTheme, isAuthenticated }: NavbarProps) {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Inicio', icon: Dna },
-    { path: '/search', label: 'Buscar ADN', icon: Search },
-    { path: '/history', label: 'Historial', icon: History },
-    { path: '/login', label: 'Login', icon: LogIn },
-  ];
+    { path: '/', label: 'Inicio', icon: Dna, protected: true },
+    { path: '/search', label: 'Buscar ADN', icon: Search, protected: true },
+    { path: '/history', label: 'Historial', icon: History, protected: true },
+    { path: '/login', label: 'Login', icon: LogIn, protected: false },
+  ].filter((item) => {
+    if (item.path === '/login') return !isAuthenticated;
+    return true;
+  });
 
   return (
     <motion.nav

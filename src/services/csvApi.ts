@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./config";
+import { API_BASE_URL, authHeaders } from "./config";
 
 export interface DNARecord {
   nombre: string;
@@ -18,6 +18,7 @@ export async function uploadCsv(file: File): Promise<UploadCsvResponse> {
   const response = await fetch(`${API_BASE_URL}/api/csv/upload`, {
     method: "POST",
     body: formData,
+    headers: authHeaders(),
   });
 
   const data = await response.json();
@@ -29,7 +30,9 @@ export async function uploadCsv(file: File): Promise<UploadCsvResponse> {
 }
 
 export async function getCsvRegistros(): Promise<DNARecord[]> {
-  const response = await fetch(`${API_BASE_URL}/api/csv/registros`);
+  const response = await fetch(`${API_BASE_URL}/api/csv/registros`, {
+    headers: authHeaders(),
+  });
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Error al obtener los registros del CSV");
@@ -38,7 +41,9 @@ export async function getCsvRegistros(): Promise<DNARecord[]> {
 }
 
 export async function listCsvFiles(): Promise<string[]> {
-  const response = await fetch(`${API_BASE_URL}/api/csv/list`);
+  const response = await fetch(`${API_BASE_URL}/api/csv/list`, {
+    headers: authHeaders(),
+  });
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Error al listar los CSV");
@@ -47,7 +52,9 @@ export async function listCsvFiles(): Promise<string[]> {
 }
 
 export async function getActiveCsv(): Promise<string | null> {
-  const response = await fetch(`${API_BASE_URL}/api/csv/active`);
+  const response = await fetch(`${API_BASE_URL}/api/csv/active`, {
+    headers: authHeaders(),
+  });
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Error al obtener el CSV activo");
@@ -58,6 +65,7 @@ export async function getActiveCsv(): Promise<string | null> {
 export async function setActiveCsv(filename: string): Promise<string> {
   const response = await fetch(`${API_BASE_URL}/api/csv/set-active/${encodeURIComponent(filename)}`, {
     method: "POST",
+    headers: authHeaders(),
   });
   const data = await response.json();
   if (!response.ok) {

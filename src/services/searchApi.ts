@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./config";
+import { API_BASE_URL, authHeaders } from "./config";
 
 export interface SearchResponse {
   patron: string;
@@ -14,6 +14,7 @@ export async function searchPattern(patron: string): Promise<SearchResponse> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
     },
     body: JSON.stringify({ patron }),
   });
