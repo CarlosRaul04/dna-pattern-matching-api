@@ -2,11 +2,12 @@
 const path = require("path");
 const csvService = require("./csv.service");
 const { ejecutarKmpConCsv } = require("../utils/kmp.util");
+const searchHistoryService = require("./searchHistory.service");
 
 const searchCache = new Map();
 const CACHE_MAX = 100;
 
-async function buscarPatron(patron, useCache = true) {
+async function buscarPatron(patron, userId, useCache = true) {
   const requestStart = Date.now();
 
   // Normalizar patrón
@@ -19,9 +20,8 @@ async function buscarPatron(patron, useCache = true) {
   console.log(`Nueva búsqueda: "${patron}"`);
   console.log("-".repeat(60));
 
-  // ---------------------------------------
+
   // 1) USAR CACHE SI EXISTE
-  // ---------------------------------------
   if (useCache && searchCache.has(patron)) {
     const cached = searchCache.get(patron);
     console.log(`Resultado obtenido desde caché en ${Date.now() - requestStart}ms`);
@@ -29,9 +29,7 @@ async function buscarPatron(patron, useCache = true) {
     return cached;
   }
 
-  // ---------------------------------------
   // 2) OBTENER CSV ACTIVO
-  // ---------------------------------------
   const activeCsv = csvService.getActiveCsv();
   if (!activeCsv) {
     throw new Error("No hay un CSV activo seleccionado.");
@@ -41,9 +39,7 @@ async function buscarPatron(patron, useCache = true) {
   console.log(`CSV activo: ${activeCsv}`);
   console.log(`Ruta del archivo: ${csvPath}`);
 
-  // ---------------------------------------
   // 3) EJECUTAR BINARIO C++
-  // ---------------------------------------
   const searchStart = Date.now();
 
   const resultadoCpp = await ejecutarKmpConCsv(patron, csvPath);
@@ -51,12 +47,6 @@ async function buscarPatron(patron, useCache = true) {
   const searchDuration = Date.now() - searchStart;
   console.log(`🔍 Búsqueda KMP completada por el binario en ${searchDuration}ms`);
 
-  // resultadoCpp debe ser algo así:
-  // {
-  //   patron: "...",
-  //   total: 3,
-  //   sospechosos: ["Juan", "Ana", "Luis"]
-  // }
 
   const resultado = {
     patron,
@@ -66,9 +56,22 @@ async function buscarPatron(patron, useCache = true) {
     archivo: activeCsv
   };
 
-  // ---------------------------------------
+  // GUARDAR HISTORIAL EN BD
+  try {
+    await searchHistoryService.crearHistorial({
+      userId,
+      patron: resultado.patron,
+      resultados: resultado.nombres,
+      totalCoincidencias: resultado.total,
+      archivoCsv: resultado.archivo,
+      duracionMs: resultado.tiempoTotal
+    });
+    console.log("Historial de búsqueda guardado en la base de datos");
+  } catch (error) {
+    console.error("Error guardando historial:", error.message);
+  }
+
   // 4) GUARDAR EN CACHE
-  // ---------------------------------------
   searchCache.set(patron, resultado);
 
   if (searchCache.size > CACHE_MAX) {

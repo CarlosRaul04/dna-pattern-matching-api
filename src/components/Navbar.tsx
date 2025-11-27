@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Dna, Search, History, Sun, Moon } from 'lucide-react';
+import { Dna, Search, History, Sun, Moon, LogIn } from 'lucide-react';
 
 interface NavbarProps {
   theme: 'light' | 'dark';
@@ -14,6 +14,7 @@ export default function Navbar({ theme, toggleTheme }: NavbarProps) {
     { path: '/', label: 'Inicio', icon: Dna },
     { path: '/search', label: 'Buscar ADN', icon: Search },
     { path: '/history', label: 'Historial', icon: History },
+    { path: '/login', label: 'Login', icon: LogIn },
   ];
 
   return (

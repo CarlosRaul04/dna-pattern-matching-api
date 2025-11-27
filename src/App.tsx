@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Home from './components/Home';
 import SearchDNA from './components/SearchDNA';
 import History from './components/History';
+import Login from './components/Login';
 import { Toaster } from './components/ui/sonner';
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<SearchDNA theme={theme} />} />
           <Route path="/history" element={<History theme={theme} />} />
+          <Route path="/login" element={<Login theme={theme} />} />
           <Route path="*" element={<Home />} />
         </Routes>
         <Toaster position="top-right" richColors />

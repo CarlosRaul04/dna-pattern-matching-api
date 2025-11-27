@@ -5,11 +5,13 @@ async function buscarPatron(req, res) {
   try {
     const { patron, useCache = true } = req.body;
 
+    const userId = req.user.id;
+
     if (!patron) {
       return res.status(400).json({ error: 'El campo "patron" es obligatorio.' });
     }
 
-    const resultado = await searchService.buscarPatron(patron, useCache);
+    const resultado = await searchService.buscarPatron(patron, userId, useCache);
 
     return res.json(resultado);
 

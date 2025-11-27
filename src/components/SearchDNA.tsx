@@ -13,15 +13,8 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  DNARecord,
-  getActiveCsv,
-  getCsvRegistros,
-  listCsvFiles,
-  searchPattern,
-  setActiveCsv as setActiveCsvApi,
-  uploadCsv,
-} from '../services/api';
+import { DNARecord, getActiveCsv, getCsvRegistros, listCsvFiles, setActiveCsv as setActiveCsvApi, uploadCsv } from '../services/csvApi';
+import { searchPattern } from '../services/searchApi';
 
 // Usar DNARecord directamente en lugar de SearchResult
 type SearchResult = DNARecord;
