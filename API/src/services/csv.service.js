@@ -35,24 +35,35 @@ class CsvService {
 
   // Procesar CSV recién subido
   async procesarCsv(fullPath, filename) {
-    const registros = await parseCsvFromFile(fullPath);
+    try {
+      // 1. Validar contenido del CSV
+      const registros = await parseCsvFromFile(fullPath);
 
-    if (!registros.length) {
-      throw new Error("El CSV está vacío o no tiene registros válidos.");
+      if (!registros.length) {
+        throw new Error("El CSV está vacío o no tiene registros válidos.");
+      }
+
+      // 2. Guardar registros en memoria
+      registrosCache = registros;
+
+      // 3. Establecer este CSV como activo
+      this.setActiveCsv(filename);
+
+      return {
+        filename,
+        cantidad: registros.length,
+        mensaje: "CSV cargado correctamente",
+      };
+    } catch (error) {
+      // ❌ Si el CSV es inválido, eliminar archivo físico
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+        console.warn("Archivo CSV inválido eliminado:", filename);
+      }
+
+      throw error;
     }
-
-    // Guardar en memoria (para el C++)
-    registrosCache = await registros;
-
-    this.setActiveCsv(filename);
-
-    return {
-      filename,
-      cantidad: registros.length,
-      mensaje: "CSV cargado correctamente",
-    };
   }
-
 
   // Obtener registros en memoria
   obtenerRegistros() {

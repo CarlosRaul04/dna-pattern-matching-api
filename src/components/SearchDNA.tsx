@@ -105,7 +105,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
       setSelectedFile(null);
       await loadCsvData();
     } catch (error) {
-      toast.error('Error al subir el CSV');
+      toast.error('Error al subir el CSV, formato incorrecto o problema en el servidor');
       console.error(error);
     } finally {
       setIsUploading(false);
@@ -455,7 +455,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
               ) : (
                 <>
                   <Search className="w-5 h-5" />
-                  Buscar con API
+                  Buscar
                 </>
               )}
             </motion.button>
