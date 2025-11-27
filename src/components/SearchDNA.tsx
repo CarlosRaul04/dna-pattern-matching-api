@@ -1,8 +1,27 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Loader2, AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Database } from 'lucide-react';
+import {
+  Search,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Upload,
+  RefreshCw,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { searchPattern, getAllSequences, DNARecord } from '../services/api';
+import {
+  DNARecord,
+  getActiveCsv,
+  getCsvRegistros,
+  listCsvFiles,
+  searchPattern,
+  setActiveCsv as setActiveCsvApi,
+  uploadCsv,
+} from '../services/api';
 
 // Usar DNARecord directamente en lugar de SearchResult
 type SearchResult = DNARecord;
@@ -21,6 +40,10 @@ const ITEMS_PER_PAGE = 10;
 
 export default function SearchDNA({ theme }: SearchDNAProps) {
   const [allSequences, setAllSequences] = useState([] as DNARecord[]);
+  const [csvFiles, setCsvFiles] = useState([] as string[]);
+  const [activeCsv, setActiveCsv] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [pattern, setPattern] = useState('');
   const [searchResults, setSearchResults] = useState([] as SearchResult[]);
   const [isSearching, setIsSearching] = useState(false);
@@ -32,19 +55,33 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
   const [backendTime, setBackendTime] = useState(null as number | null);
   const [searchMetadata, setSearchMetadata] = useState(null as SearchMetadata | null);
 
-  // Cargar todas las secuencias al montar el componente
+  // Cargar datos desde la API al montar el componente
   useEffect(() => {
-    loadAllSequences();
+    loadCsvData();
   }, []);
 
-  const loadAllSequences = async () => {
+  const loadCsvData = async () => {
     try {
       setIsLoading(true);
-      const sequences = await getAllSequences();
-      setAllSequences(sequences);
-      toast.success(`✅ ${sequences.length} secuencias cargadas desde la API`);
+      const [files, active] = await Promise.all([
+        listCsvFiles(),
+        getActiveCsv(),
+      ]);
+
+      setCsvFiles(files);
+      setActiveCsv(active);
+
+      if (active) {
+        const sequences = await getCsvRegistros();
+        setAllSequences(sequences);
+        toast.success(`API lista: ${sequences.length} secuencias en ${active}`);
+      } else {
+        setAllSequences([]);
+        toast.warning('No hay un CSV activo. Sube uno o selecciona de la lista.');
+      }
     } catch (error) {
-      toast.error('❌ Error al conectar con la API. Verifica que esté corriendo en el puerto 3000');
+      setAllSequences([]);
+      toast.error('Error al conectar con la API. Verifica que el backend este disponible.');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -52,12 +89,55 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
   };
 
   const handleRefresh = async () => {
-    await loadAllSequences();
+    await loadCsvData();
   };
 
-  const handlePatternChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setSelectedFile(file || null);
+  };
+
+  const handleUploadCsv = async () => {
+    if (!selectedFile) {
+      toast.error('Selecciona un archivo CSV para subir');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const response = await uploadCsv(selectedFile);
+      toast.success(response.mensaje || 'CSV subido correctamente');
+      setActiveCsv(response.filename);
+      setSelectedFile(null);
+      await loadCsvData();
+    } catch (error) {
+      toast.error('Error al subir el CSV');
+      console.error(error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSetActiveCsv = async (filename: string) => {
+    if (!filename || filename === activeCsv) return;
+
+    try {
+      setIsLoading(true);
+      await setActiveCsvApi(filename);
+      setActiveCsv(filename);
+      const sequences = await getCsvRegistros();
+      setAllSequences(sequences);
+      toast.success(`CSV activo: ${filename} (${sequences.length} secuencias)`);
+    } catch (error) {
+      toast.error('No se pudo activar el CSV seleccionado');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePatternChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.toUpperCase();
-    // Solo permitir A, C, G, T
     if (/^[ACGT]*$/.test(value)) {
       setPattern(value);
     }
@@ -65,12 +145,17 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
 
   const handleSearch = async () => {
     if (!pattern) {
-      toast.error('Por favor, ingresa un patrón de búsqueda');
+      toast.error('Por favor, ingresa un patron de busqueda');
+      return;
+    }
+
+    if (!activeCsv) {
+      toast.error('Selecciona o sube un CSV antes de buscar');
       return;
     }
 
     if (allSequences.length === 0) {
-      toast.error('No hay secuencias cargadas. Verifica la conexión con la API');
+      toast.error('No hay secuencias cargadas. Verifica la conexion con la API');
       return;
     }
 
@@ -83,35 +168,20 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
     setSearchMetadata(null);
 
     const startTime = performance.now();
-    console.log('\n' + '='.repeat(60));
-    console.log(`🔍 [SearchDNA] Iniciando búsqueda del patrón: "${pattern}"`);
-    console.log('='.repeat(60));
 
     try {
-      // Llamar a la API para buscar el patrón
-      const response = await searchPattern(pattern, 250, true); // 500 búsquedas paralelas, con caché
-      
+      const response = await searchPattern(pattern);
+
       const totalTime = performance.now() - startTime;
       setSearchTime(totalTime);
       setBackendTime(response.tiempoTotal || null);
 
-      console.log(`⏱️  [SearchDNA] Tiempo total UI: ${totalTime.toFixed(2)}ms`);
-      console.log(`📊 [SearchDNA] Backend reporta: ${response.total} coincidencias`);
-      console.log(`📊 [SearchDNA] Backend devolvió ${response.nombres.length} nombres`);
-      
-      // Verificar si hay duplicados en la respuesta del backend
-      const nombresUnicos = new Set(response.nombres);
-      if (nombresUnicos.size !== response.nombres.length) {
-        console.warn(`⚠️  [SearchDNA] Backend devolvió nombres duplicados: ${response.nombres.length} nombres, ${nombresUnicos.size} únicos`);
-      }
-      
-      // Crear un mapa de nombres a secuencias para búsqueda rápida
-      const secuenciasPorNombre = new Map(allSequences.map(seq => [seq.nombre, seq]));
-      
-      // Obtener los detalles completos SOLO de los nombres únicos que devolvió el backend
+      const nombresUnicos = new Set(response.nombres || []);
+      const secuenciasPorNombre = new Map(allSequences.map((seq) => [seq.nombre, seq]));
+
       const matchedSequences: SearchResult[] = [];
       const nombresNoEncontrados: string[] = [];
-      
+
       for (const nombre of nombresUnicos) {
         const secuencia = secuenciasPorNombre.get(nombre);
         if (secuencia) {
@@ -121,86 +191,62 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
         }
       }
 
-      console.log(`📊 [SearchDNA] Frontend encontró: ${matchedSequences.length} secuencias con detalles`);
-      
-      // Detectar discrepancias
       const hasDiscrepancy = matchedSequences.length !== response.total;
       if (hasDiscrepancy) {
-        console.warn(`⚠️  [SearchDNA] DISCREPANCIA: Backend=${response.total}, Frontend=${matchedSequences.length}`);
-        
-        if (nombresNoEncontrados.length > 0) {
-          console.warn(`⚠️  [SearchDNA] Nombres en backend pero no en frontend (${nombresNoEncontrados.length}):`, nombresNoEncontrados.slice(0, 5));
+        toast.warning(`Discrepancia: backend=${response.total}, frontend=${matchedSequences.length}`);
+        if (nombresNoEncontrados.length) {
+          console.warn('Nombres sin detalle en frontend:', nombresNoEncontrados.slice(0, 5));
         }
-        
-        // Verificar si hay duplicados en allSequences
-        const nombresEnFrontend = allSequences.map(s => s.nombre);
-        const nombresEnFrontendUnicos = new Set(nombresEnFrontend);
-        if (nombresEnFrontend.length !== nombresEnFrontendUnicos.size) {
-          const duplicados = nombresEnFrontend.length - nombresEnFrontendUnicos.size;
-          console.warn(`⚠️  [SearchDNA] Frontend tiene ${duplicados} nombres duplicados en allSequences`);
-        }
-        
-        toast.warning(`⚠️ Discrepancia: Backend=${response.total}, Frontend=${matchedSequences.length}. Revisa la consola para detalles.`);
-      } else {
-        console.log(`✅ [SearchDNA] Conteos coinciden perfectamente`);
       }
-      
+
       setSearchResults(matchedSequences);
       setSearchMetadata({
         backendTotal: response.total,
         frontendTotal: matchedSequences.length,
-        hasDiscrepancy
+        hasDiscrepancy,
       });
       setHasSearched(true);
 
-      // Guardar en historial
       const historyEntry = {
         id: Date.now().toString(),
         pattern,
         date: new Date().toISOString(),
         matchCount: response.total,
-        foundNames: response.nombres
+        foundNames: response.nombres,
       };
 
       const history = JSON.parse(localStorage.getItem('dna_search_history') || '[]');
       history.unshift(historyEntry);
       localStorage.setItem('dna_search_history', JSON.stringify(history));
-
-      // Toast removido - los resultados se muestran en la UI
-
-      console.log(`✅ [SearchDNA] Búsqueda completada exitosamente`);
-      console.log('='.repeat(60) + '\n');
     } catch (error) {
-      toast.error('❌ Error al realizar la búsqueda');
-      console.error('❌ [SearchDNA] Error:', error);
-      console.log('='.repeat(60) + '\n');
+      toast.error('Error al realizar la busqueda');
+      console.error('[SearchDNA] Error:', error);
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Filtrar resultados por nombre
   const filteredResults = useMemo(() => {
-    return searchResults.filter(r => 
-      r.nombre.toLowerCase().includes(nameFilter.toLowerCase())
-    );
+    return searchResults.filter((r) => r.nombre.toLowerCase().includes(nameFilter.toLowerCase()));
   }, [searchResults, nameFilter]);
 
-  // Paginación
-  const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE) || 1;
   const paginatedResults = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     return filteredResults.slice(startIndex, endIndex);
   }, [filteredResults, currentPage]);
 
-  // Usar siempre el conteo del backend como fuente de verdad
   const matchCount = searchMetadata?.backendTotal ?? searchResults.length;
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const cardBase = theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-white/80 border-gray-200';
+  const textMuted = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
+  const textMain = theme === 'dark' ? 'text-white' : 'text-gray-900';
 
   return (
     <div className="container mx-auto px-4 py-8 min-h-[calc(100vh-80px)]">
@@ -210,10 +256,10 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
         className="max-w-6xl mx-auto"
       >
         <div className="flex justify-between items-center mb-8">
-          <h1 className={`text-4xl ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            🧬 Búsqueda de Patrones de ADN
+          <h1 className={`text-4xl ${textMain}`}>
+            Busqueda de Patrones de ADN
           </h1>
-          
+
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -239,54 +285,145 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
           </motion.button>
         </div>
 
-        {/* API Status */}
+        {/* Gestor de CSV */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${cardBase}`}
+        >
+          <div className="flex flex-col lg:flex-row gap-6">
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className={`text-2xl mb-1 ${textMain}`}>Fuente de datos (CSV)</h2>
+                  <p className={textMuted}>Selecciona el CSV que usara el backend para las busquedas.</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-sm ${
+                  activeCsv
+                    ? theme === 'dark'
+                      ? 'bg-green-500/20 text-green-300'
+                      : 'bg-green-100 text-green-700'
+                    : theme === 'dark'
+                    ? 'bg-orange-500/20 text-orange-300'
+                    : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {activeCsv ? `Activo: ${activeCsv}` : 'Sin CSV activo'}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className={`flex items-center gap-3 flex-1 px-3 py-2 rounded-lg border ${
+                  theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-300'
+                }`}>
+                  <FileSpreadsheet className={theme === 'dark' ? 'text-blue-300' : 'text-blue-600'} />
+                  <select
+                    className={`w-full bg-transparent focus:outline-none ${textMain}`}
+                    value={activeCsv || ''}
+                    onChange={(e) => handleSetActiveCsv(e.target.value)}
+                  >
+                    <option value="">Selecciona un CSV</option>
+                    {csvFiles.map((file) => (
+                      <option key={file} value={file}>
+                        {file}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                    theme === 'dark'
+                      ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
+                      : 'bg-blue-500/20 text-blue-600 hover:bg-blue-500/30'
+                  }`}
+                >
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                  Actualizar lista
+                </motion.button>
+              </div>
+              <p className={`mt-2 text-sm ${textMuted}`}>
+                Archivos encontrados en el servidor: {csvFiles.length}
+              </p>
+            </div>
+
+            <div className="w-full lg:w-80">
+              <p className={`mb-2 font-medium ${textMain}`}>Subir nuevo CSV</p>
+              <div className="flex flex-col sm:flex-row gap-3 items-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  className={`w-full text-sm ${
+                    theme === 'dark'
+                      ? 'file:bg-blue-500/20 file:text-blue-300 file:border-none file:px-3 file:py-2 bg-gray-900/40 text-white border border-gray-700 rounded-lg'
+                      : 'file:bg-blue-100 file:text-blue-700 file:border-none file:px-3 file:py-2 bg-white text-gray-800 border border-gray-300 rounded-lg'
+                  }`}
+                />
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleUploadCsv}
+                  disabled={!selectedFile || isUploading}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                    !selectedFile || isUploading
+                      ? 'bg-gray-500/30 text-gray-400 cursor-not-allowed'
+                      : theme === 'dark'
+                      ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                      : 'bg-green-500/20 text-green-700 hover:bg-green-500/30'
+                  }`}
+                >
+                  {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                  Subir CSV
+                </motion.button>
+              </div>
+              {selectedFile && (
+                <p className={`mt-2 text-sm ${textMuted}`}>Seleccionado: {selectedFile.name}</p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Estado de la API */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${
-            theme === 'dark'
-              ? 'bg-white/5 border-white/10'
-              : 'bg-white/80 border-gray-200'
-          }`}
+          className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${cardBase}`}
         >
           <div className="flex items-center justify-between">
             <div>
-              <h2 className={`text-2xl mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                Estado de la API
-              </h2>
-              <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                {isLoading ? (
-                  'Conectando con la API...'
-                ) : allSequences.length > 0 ? (
-                  `✅ Conectado - ${allSequences.length} secuencias disponibles`
-                ) : (
-                  '❌ No se pudo conectar con la API. Verifica que esté corriendo en http://localhost:3000'
-                )}
+              <h2 className={`text-2xl mb-2 ${textMain}`}>Estado de la API</h2>
+              <p className={textMuted}>
+                {isLoading
+                  ? 'Cargando datos desde el backend...'
+                  : allSequences.length > 0
+                  ? `Conectado. Registros cargados: ${allSequences.length}${activeCsv ? ` (CSV: ${activeCsv})` : ''}`
+                  : 'No se pudo obtener un CSV activo. Sube uno o selecciona de la lista.'}
               </p>
             </div>
-            <div className={`w-4 h-4 rounded-full ${
-              allSequences.length > 0 ? 'bg-green-500' : 'bg-red-500'
-            } animate-pulse`} />
+            <div
+              className={`w-4 h-4 rounded-full ${
+                allSequences.length > 0 ? 'bg-green-500' : 'bg-red-500'
+              } animate-pulse`}
+            />
           </div>
         </motion.div>
 
-        {/* Search Section */}
+        {/* Busqueda */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${
-            theme === 'dark'
-              ? 'bg-white/5 border-white/10'
-              : 'bg-white/80 border-gray-200'
-          }`}
+          className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${cardBase}`}
         >
-          <h2 className={`text-2xl mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            Ingresar Patrón de Búsqueda
-          </h2>
+          <h2 className={`text-2xl mb-4 ${textMain}`}>Ingresar patron de busqueda</h2>
 
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
             <input
               type="text"
               value={pattern}
@@ -313,7 +450,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
               {isSearching ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Buscando con KMP...
+                  Buscando...
                 </>
               ) : (
                 <>
@@ -324,44 +461,38 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
             </motion.button>
           </div>
 
-          <p className={`mt-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+          <p className={`mt-4 ${textMuted}`}>
             Solo se permiten las letras: <strong>A, C, G, T</strong>
           </p>
         </motion.div>
 
-        {/* Results Summary */}
+        {/* Resumen de resultados */}
         <AnimatePresence>
           {hasSearched && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${
-                theme === 'dark'
-                  ? 'bg-white/5 border-white/10'
-                  : 'bg-white/80 border-gray-200'
-              }`}
+              className={`mb-8 p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${cardBase}`}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className={`p-4 rounded-xl ${
-                  theme === 'dark' ? 'bg-blue-500/10' : 'bg-blue-500/10'
-                }`}>
-                  <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Patrón Buscado:
-                  </p>
-                  <p className={`text-2xl ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {pattern}
-                  </p>
+                <div className={`${theme === 'dark' ? 'bg-blue-500/10' : 'bg-blue-500/10'} p-4 rounded-xl`}>
+                  <p className={`mb-2 text-sm ${textMuted}`}>Patron buscado:</p>
+                  <p className={`text-2xl ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>{pattern}</p>
                 </div>
 
-                <div className={`p-4 rounded-xl ${
-                  matchCount > 0
-                    ? theme === 'dark' ? 'bg-green-500/10' : 'bg-green-500/10'
-                    : theme === 'dark' ? 'bg-orange-500/10' : 'bg-orange-500/10'
-                }`}>
-                  <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Coincidencias:
-                  </p>
+                <div
+                  className={`p-4 rounded-xl ${
+                    matchCount > 0
+                      ? theme === 'dark'
+                        ? 'bg-green-500/10'
+                        : 'bg-green-500/10'
+                      : theme === 'dark'
+                      ? 'bg-orange-500/10'
+                      : 'bg-orange-500/10'
+                  }`}
+                >
+                  <p className={`mb-2 text-sm ${textMuted}`}>Coincidencias:</p>
                   <motion.p
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
@@ -376,18 +507,14 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                   </motion.p>
                   {searchMetadata?.hasDiscrepancy && (
                     <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                      ⚠️ {searchMetadata.frontendTotal} con detalles
+                      Advertencia: {searchMetadata.frontendTotal} con detalles
                     </p>
                   )}
                 </div>
 
                 {backendTime !== null && (
-                  <div className={`p-4 rounded-xl ${
-                    theme === 'dark' ? 'bg-purple-500/10' : 'bg-purple-500/10'
-                  }`}>
-                    <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Tiempo Backend:
-                    </p>
+                  <div className={`${theme === 'dark' ? 'bg-purple-500/10' : 'bg-purple-500/10'} p-4 rounded-xl`}>
+                    <p className={`mb-2 text-sm ${textMuted}`}>Tiempo backend:</p>
                     <motion.p
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
@@ -400,12 +527,8 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                 )}
 
                 {searchTime !== null && (
-                  <div className={`p-4 rounded-xl ${
-                    theme === 'dark' ? 'bg-cyan-500/10' : 'bg-cyan-500/10'
-                  }`}>
-                    <p className={`mb-2 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Tiempo Total:
-                    </p>
+                  <div className={`${theme === 'dark' ? 'bg-cyan-500/10' : 'bg-cyan-500/10'} p-4 rounded-xl`}>
+                    <p className={`mb-2 text-sm ${textMuted}`}>Tiempo total:</p>
                     <motion.p
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
@@ -418,31 +541,24 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                 )}
               </div>
 
-              {/* Performance Info */}
               {backendTime !== null && searchTime !== null && (
                 <div className={`mt-4 p-3 rounded-lg ${
                   theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-100'
                 }`}>
-                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    ⚡ Velocidad: {(allSequences.length / (backendTime / 1000)).toFixed(2)} búsquedas/segundo
-                    {' • '}
-                    🌐 Latencia de red: {((searchTime - backendTime) / 1000).toFixed(3)}s
+                  <p className={`text-sm ${textMuted}`}>
+                    Velocidad: {(allSequences.length / (backendTime / 1000)).toFixed(2)} busquedas/segundo � Latencia de red: {((searchTime - backendTime) / 1000).toFixed(3)}s
                   </p>
                 </div>
               )}
 
-              {/* Discrepancy Warning */}
               {searchMetadata?.hasDiscrepancy && (
                 <div className={`mt-4 p-4 rounded-lg border ${
-                  theme === 'dark' 
-                    ? 'bg-yellow-500/10 border-yellow-500/30' 
+                  theme === 'dark'
+                    ? 'bg-yellow-500/10 border-yellow-500/30'
                     : 'bg-yellow-50 border-yellow-300'
                 }`}>
-                  <p className={`text-sm ${theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700'}`}>
-                    ⚠️ <strong>Discrepancia detectada:</strong> El backend encontró {searchMetadata.backendTotal} coincidencias, 
-                    pero solo se pudieron cargar {searchMetadata.frontendTotal} registros con detalles completos. 
-                    Esto puede deberse a que el backend tiene datos más actualizados. 
-                    Intenta recargar las secuencias.
+                  <p className={`text-sm ${theme === 'dark' ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                    Discrepancia detectada: el backend encontro {searchMetadata.backendTotal} coincidencias, pero solo se cargaron {searchMetadata.frontendTotal} registros con detalles. Intenta recargar las secuencias.
                   </p>
                 </div>
               )}
@@ -450,38 +566,31 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
           )}
         </AnimatePresence>
 
-        {/* Results Table */}
+        {/* Tabla de resultados */}
         <AnimatePresence>
           {hasSearched && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className={`p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${
-                theme === 'dark'
-                  ? 'bg-white/5 border-white/10'
-                  : 'bg-white/80 border-gray-200'
-              }`}
+              className={`p-6 rounded-2xl backdrop-blur-xl border shadow-2xl ${cardBase}`}
             >
-              <h2 className={`text-2xl mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                Resultados de Búsqueda ({matchCount} coincidencias)
+              <h2 className={`text-2xl mb-4 ${textMain}`}>
+                Resultados de busqueda ({matchCount} coincidencias)
               </h2>
 
               {matchCount === 0 ? (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className={`text-center py-12 ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                  }`}
+                  className={`text-center py-12 ${textMuted}`}
                 >
                   <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-xl">🔍 No se encontraron coincidencias</p>
-                  <p className="mt-2">Intenta con un patrón diferente</p>
+                  <p className="text-xl">No se encontraron coincidencias</p>
+                  <p className="mt-2">Intenta con un patron diferente</p>
                 </motion.div>
               ) : (
                 <>
-                  {/* Name Filter */}
                   <div className="mb-6">
                     <input
                       type="text"
@@ -490,7 +599,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                         setNameFilter(e.target.value);
                         setCurrentPage(1);
                       }}
-                      placeholder="🔍 Buscar por nombre..."
+                      placeholder="Buscar por nombre..."
                       className={`w-full px-4 py-3 rounded-xl border transition-all ${
                         theme === 'dark'
                           ? 'bg-gray-800/50 border-gray-700 text-white placeholder-gray-500'
@@ -498,16 +607,14 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                       }`}
                     />
                     {nameFilter && (
-                      <p className={`mt-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <p className={`mt-2 ${textMuted}`}>
                         Mostrando {filteredResults.length} de {matchCount} coincidencias
                       </p>
                     )}
                   </div>
 
                   {filteredResults.length === 0 ? (
-                    <div className={`text-center py-8 ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
+                    <div className={`text-center py-8 ${textMuted}`}>
                       <p className="text-lg">No se encontraron resultados con ese nombre</p>
                     </div>
                   ) : (
@@ -515,27 +622,17 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead>
-                            <tr className={`border-b ${
-                              theme === 'dark' ? 'border-gray-700' : 'border-gray-300'
-                            }`}>
-                              <th className={`px-4 py-3 text-left ${
-                                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                              }`}>#</th>
-                              <th className={`px-4 py-3 text-left ${
-                                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                              }`}>Nombre</th>
-                              <th className={`px-4 py-3 text-left ${
-                                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                              }`}>Secuencia</th>
-                              <th className={`px-4 py-3 text-left ${
-                                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                              }`}>Estado</th>
+                            <tr className={`border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'}`}>
+                              <th className={`px-4 py-3 text-left ${textMuted}`}>#</th>
+                              <th className={`px-4 py-3 text-left ${textMuted}`}>Nombre</th>
+                              <th className={`px-4 py-3 text-left ${textMuted}`}>Secuencia</th>
+                              <th className={`px-4 py-3 text-left ${textMuted}`}>Estado</th>
                             </tr>
                           </thead>
                           <tbody>
                             {paginatedResults.map((result, index) => (
                               <motion.tr
-                                key={index}
+                                key={result.nombre + index}
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: index * 0.05 }}
@@ -545,29 +642,25 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                                     : 'border-gray-200 hover:bg-gray-50'
                                 }`}
                               >
-                                <td className={`px-4 py-3 ${
-                                  theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                                }`}>
+                                <td className={`px-4 py-3 ${textMuted}`}>
                                   {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                                 </td>
-                                <td className={`px-4 py-3 ${
-                                  theme === 'dark' ? 'text-white' : 'text-gray-900'
-                                }`}>
+                                <td className={`px-4 py-3 ${textMain}`}>
                                   {result.nombre}
                                 </td>
-                                <td className={`px-4 py-3 font-mono ${
-                                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                                }`}>
+                                <td className={`px-4 py-3 font-mono ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                                   {result.secuencia.length > 50
-                                    ? result.secuencia.substring(0, 50) + '...'
+                                    ? `${result.secuencia.substring(0, 50)}...`
                                     : result.secuencia}
                                 </td>
                                 <td className="px-4 py-3">
-                                  <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
-                                    theme === 'dark'
-                                      ? 'bg-green-500/20 text-green-400'
-                                      : 'bg-green-500/20 text-green-600'
-                                  }`}>
+                                  <span
+                                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
+                                      theme === 'dark'
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : 'bg-green-500/20 text-green-600'
+                                    }`}
+                                  >
                                     <CheckCircle className="w-4 h-4" />
                                     Coincide
                                   </span>
@@ -578,13 +671,12 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                         </table>
                       </div>
 
-                      {/* Pagination */}
                       {totalPages > 1 && (
                         <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                          <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Página {currentPage} de {totalPages} • Mostrando {paginatedResults.length} de {filteredResults.length} resultados
+                          <p className={textMuted}>
+                            Pagina {currentPage} de {totalPages} � Mostrando {paginatedResults.length} de {filteredResults.length} resultados
                           </p>
-                          
+
                           <div className="flex items-center gap-2">
                             <motion.button
                               whileHover={{ scale: 1.05 }}
@@ -607,32 +699,17 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                               {(() => {
                                 const pages: number[] = [];
                                 const maxVisible = 5;
-                                
+
                                 if (totalPages <= maxVisible) {
-                                  // Mostrar todas las páginas si son pocas
-                                  for (let i = 1; i <= totalPages; i++) {
-                                    pages.push(i);
-                                  }
+                                  for (let i = 1; i <= totalPages; i++) pages.push(i);
+                                } else if (currentPage <= 3) {
+                                  for (let i = 1; i <= maxVisible; i++) pages.push(i);
+                                } else if (currentPage >= totalPages - 2) {
+                                  for (let i = totalPages - maxVisible + 1; i <= totalPages; i++) pages.push(i);
                                 } else {
-                                  // Mostrar páginas con elipsis
-                                  if (currentPage <= 3) {
-                                    // Inicio: 1 2 3 4 5
-                                    for (let i = 1; i <= maxVisible; i++) {
-                                      pages.push(i);
-                                    }
-                                  } else if (currentPage >= totalPages - 2) {
-                                    // Final: (n-4) (n-3) (n-2) (n-1) n
-                                    for (let i = totalPages - maxVisible + 1; i <= totalPages; i++) {
-                                      pages.push(i);
-                                    }
-                                  } else {
-                                    // Medio: (current-2) (current-1) current (current+1) (current+2)
-                                    for (let i = currentPage - 2; i <= currentPage + 2; i++) {
-                                      pages.push(i);
-                                    }
-                                  }
+                                  for (let i = currentPage - 2; i <= currentPage + 2; i++) pages.push(i);
                                 }
-                                
+
                                 return pages.map((pageNum) => (
                                   <motion.button
                                     key={pageNum}
@@ -641,9 +718,7 @@ export default function SearchDNA({ theme }: SearchDNAProps) {
                                     onClick={() => handlePageChange(pageNum)}
                                     className={`w-10 h-10 rounded-lg transition-all ${
                                       currentPage === pageNum
-                                        ? theme === 'dark'
-                                          ? 'bg-blue-500 text-white'
-                                          : 'bg-blue-500 text-white'
+                                        ? 'bg-blue-500 text-white'
                                         : theme === 'dark'
                                         ? 'bg-white/5 text-gray-400 hover:bg-white/10'
                                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'

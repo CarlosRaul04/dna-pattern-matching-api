@@ -1,9 +1,15 @@
-// Configuración de la API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+﻿// ConfiguraciÃ³n de la API
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 export interface DNARecord {
   nombre: string;
   secuencia: string;
+}
+
+export interface UploadCsvResponse {
+  filename: string;
+  cantidad: number;
+  mensaje: string;
 }
 
 export interface SearchResponse {
@@ -12,55 +18,94 @@ export interface SearchResponse {
   nombres: string[];
   tiempoTotal?: number;
   registrosProcesados?: number;
+  archivo?: string;
 }
 
-// Obtener todas las secuencias
-export async function getAllSequences(): Promise<DNARecord[]> {
-  const response = await fetch(`${API_BASE_URL}/api/secuencias`);
-  if (!response.ok) {
-    throw new Error('Error al obtener las secuencias');
-  }
-  return response.json();
-}
+// ----------------------------
+// CSV endpoints (/api/csv/*)
+// ----------------------------
+export async function uploadCsv(file: File): Promise<UploadCsvResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
 
-// Obtener una secuencia por nombre
-export async function getSequenceByName(nombre: string): Promise<DNARecord> {
-  const response = await fetch(`${API_BASE_URL}/api/secuencias/${encodeURIComponent(nombre)}`);
-  if (!response.ok) {
-    throw new Error('Secuencia no encontrada');
-  }
-  return response.json();
-}
+  const response = await fetch(`${API_BASE_URL}/api/csv/upload`, {
+    method: "POST",
+    body: formData,
+  });
 
-// Buscar patrón en todas las secuencias
-export async function searchPattern(patron: string, concurrencia?: number, useCache: boolean = true): Promise<SearchResponse> {
-  const startTime = performance.now();
-  console.log(`🔍 [Frontend] Iniciando búsqueda: "${patron}" (cache: ${useCache})`);
-  
-  let url = `${API_BASE_URL}/api/buscar?patron=${encodeURIComponent(patron)}`;
-  if (concurrencia) {
-    url += `&concurrencia=${concurrencia}`;
-  }
-  if (!useCache) {
-    url += `&cache=false`;
-  }
-  
-  const response = await fetch(url);
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Error en la búsqueda');
-  }
-  
   const data = await response.json();
-  const totalTime = performance.now() - startTime;
-  
-  console.log(`✅ [Frontend] Búsqueda completada en ${totalTime.toFixed(2)}ms`);
-  console.log(`📊 [Frontend] Resultados: ${data.total} coincidencias de ${data.registrosProcesados || 'N/A'} registros`);
-  if (data.tiempoTotal) {
-    console.log(`⚡ [Frontend] Tiempo backend: ${data.tiempoTotal}ms`);
-    console.log(`🌐 [Frontend] Tiempo red: ${(totalTime - data.tiempoTotal).toFixed(2)}ms`);
+  if (!response.ok) {
+    throw new Error(data.error || "Error al subir el CSV");
   }
-  
+
+  return data;
+}
+
+export async function getCsvRegistros(): Promise<DNARecord[]> {
+  const response = await fetch(`${API_BASE_URL}/api/csv/registros`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Error al obtener los registros del CSV");
+  }
+  return data.registros;
+}
+
+export async function listCsvFiles(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/api/csv/list`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Error al listar los CSV");
+  }
+  return data.archivos;
+}
+
+export async function getActiveCsv(): Promise<string | null> {
+  const response = await fetch(`${API_BASE_URL}/api/csv/active`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Error al obtener el CSV activo");
+  }
+  return data.active ?? null;
+}
+
+export async function setActiveCsv(filename: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/csv/set-active/${encodeURIComponent(filename)}`, {
+    method: "POST",
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Error al establecer el CSV activo");
+  }
+  return data.active;
+}
+
+// ----------------------------
+// BÃºsqueda (/api/buscar)
+// ----------------------------
+export async function searchPattern(patron: string): Promise<SearchResponse> {
+  const startTime = performance.now();
+  console.log(`[Frontend] Buscando: "${patron}"`);
+
+  const response = await fetch(`${API_BASE_URL}/api/buscar`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ patron }),
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Error en la busqueda");
+  }
+
+  const totalTime = performance.now() - startTime;
+  console.log(`[Frontend] BÃºsqueda completada en ${totalTime.toFixed(2)}ms`);
+  console.log(`[Frontend] Resultados: ${data.total} coincidencias`);
+  if (data.tiempoTotal) {
+    console.log(`[Frontend] Tiempo backend: ${data.tiempoTotal}ms`);
+    console.log(`[Frontend] Tiempo red: ${(totalTime - data.tiempoTotal).toFixed(2)}ms`);
+  }
+
   return data;
 }
